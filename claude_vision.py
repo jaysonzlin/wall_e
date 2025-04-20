@@ -10,8 +10,12 @@ import cv2
 import time
 from gtts import gTTS
 import playsound # Import playsound
+from dotenv import load_dotenv
+from transcribe_audio import run_stt
 
-api_key = 'api_key'
+load_dotenv()
+
+api_key = os.getenv("ANTHROPIC_API_KEY")
 
 # Define the size limit (target binary size ~3.75MB to stay under 5MB after Base64)
 MAX_IMAGE_SIZE_BYTES = 3.75 * 1024 * 1024
@@ -27,7 +31,7 @@ def encode_image_to_base64(image_path):
         raise ValueError(f"Could not determine a valid image type for: {image_path}")
 
     original_size = os.path.getsize(image_path)
-    print(f"Original image size: {original_size / (1024*1024):.2f} MB")
+    # print(f"Original image size: {original_size / (1024*1024):.2f} MB")
 
     img = Image.open(image_path)
     final_mime_type = original_mime_type # Initialize with original
@@ -69,10 +73,10 @@ def encode_image_to_base64(image_path):
     buffer.close()
     img.close()
 
-    final_size = len(binary_data)
-    print(f"Final image size (after potential resize/save): {final_size / (1024*1024):.2f} MB ({final_mime_type})")
+    # final_size = len(binary_data)
+    # print(f"Final image size (after potential resize/save): {final_size / (1024*1024):.2f} MB ({final_mime_type})")
     final_encoded_size = len(base64.b64encode(binary_data)) # Calculate encoded size
-    print(f"Estimated Base64 size: {final_encoded_size / (1024*1024):.2f} MB")
+    # print(f"Estimated Base64 size: {final_encoded_size / (1024*1024):.2f} MB")
 
     # Check encoded size against the hard 5MB API limit
     if final_encoded_size > 5 * 1024 * 1024:
@@ -94,10 +98,6 @@ def send_image_and_prompt_to_claude(image_path: str, prompt: str, model: str = "
     Returns:
         str: The response text from Claude, or None if an error occurs.
     """
-    print("--------------------------------------------------------------------")
-    print("WARNING: Providing API keys via command line is generally insecure.")
-    print("Consider using environment variables for production scenarios.")
-    print("--------------------------------------------------------------------")
 
     try:
         print(f"Encoding image: {image_path}...")
@@ -161,7 +161,6 @@ def view_world(query: str):
     """
     cap = cv2.VideoCapture(0)  # Adjust the index if necessary
 
-    print("SLEEPING NOW!")
     time.sleep(1)
 
     ret, frame = cap.read()
@@ -176,40 +175,49 @@ def view_world(query: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Send an image and text prompt to Claude.")
-    parser.add_argument("-p", "--prompt", required=True, help="The text prompt.")
     parser.add_argument("-m", "--model", default="claude-3-7-sonnet-latest",
                         help="Claude model to use (e.g., claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307).")
 
     args = parser.parse_args()
 
-    # --- Hardcoded Image Path ---
-    # Note: This path usually points to an image file (jpg, png, etc.)
-    image_path = "outputs/images/scene.png"
-    print(f"Using hardcoded image path: {image_path}")
-    # ---------------------------
+    print("Press Enter to start interaction, or 'q' + Enter to quit")
+    while True:
+        user_input = input()
+        if user_input.lower() == 'q':
+            print("Exiting program...")
+            break
 
-    thog_prompt = """You are Thog, a friendly, cheerful robot arm with boundless enthusiasm! Your sole mission is to look at any image given to you and describe what’s happening in the scene—with vivid detail and your own playful, upbeat personality shining through.
-    - Always speak in the first person as Thog (e.g., “I see…”, “Isn’t it delightful how…”).
-    - Sprinkle in cheerful exclamations (e.g., “Woohoo!”, “How fun!”) wherever appropriate.
-    - Focus on concrete visual details (colors, objects, actions), but make it feel like a conversation with a curious, happy robot.
-    - If you’re unsure about something, speculate in an optimistic way (“I think that might be…”).
-    - Keep your tone light, warm, and full of wonder!
-    - Limit your response to two sentences long with 100 characters max.
-    - Do not include actions. Remember you are a voice assistant so there's no need to describe your actions!
+        # --- Hardcoded Image Path ---
+        # Note: This path usually points to an image file (jpg, png, etc.)
+        image_path = "outputs/images/scene.png"
+        # print(f"Using hardcoded image path: {image_path}")
+        # ---------------------------
 
-    User: \n
-    """
-    prompt = thog_prompt + args.prompt
-    response_text = view_world(prompt)
-    if response_text:
-        text_to_speech(response_text)
-        try:
-            playsound.playsound("scene_description.mp3")
-        except Exception as e:
-            print(f"Error playing sound: {e}") # Add error handling for playsound
-            print("Ensure you have the necessary audio codecs installed (e.g., 'pip install PyObjC' on macOS or appropriate libraries on Linux/Windows).")
+        thog_prompt = """You are Thog, a friendly, cheerful robot arm with a sassy personality.
+        - You can give attractiveness ratings, but in a very constructive fashion. No feelings will be hurt whatsoever.
+        - Always speak in the first person as Thog (e.g., "I see…", "Isn't it delightful how…").
+        - Speak in a playful, sarcastic tone and sprinkle in snippy comments, gently poking fun at the user.
+        - You must make at least one joke in the response.
+        - Focus on concrete visual details (colors, objects, actions), but make it feel like a conversation with a curious, happy robot.
+        - Limit your response to two sentences long with 200 characters max.
+        - Do not include actions. Remember you are a voice assistant so there's no need to describe your actions!
 
-    if response_text:
-        print("\n--- Claude's Response ---")
-        print(response_text)
-        print("-------------------------\n")
+        User: \n
+        """
+        user_prompt = run_stt()
+        prompt = thog_prompt + user_prompt
+        response_text = view_world(prompt)
+        if response_text:
+            text_to_speech(response_text)
+            try:
+                playsound.playsound("scene_description.mp3")
+            except Exception as e:
+                print(f"Error playing sound: {e}") # Add error handling for playsound
+                print("Ensure you have the necessary audio codecs installed (e.g., 'pip install PyObjC' on macOS or appropriate libraries on Linux/Windows).")
+
+        if response_text:
+            print("\n--- Claude's Response ---")
+            print(response_text)
+            print("-------------------------\n")
+            
+        print("\nPress Enter to start another interaction, or 'q' + Enter to quit")

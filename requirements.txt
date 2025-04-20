@@ -10,3 +10,7 @@ gTTS
 IPython
 playsound==1.2.2
 PyObjC 
+
+sounddevice
+scipy
+assemblyai
